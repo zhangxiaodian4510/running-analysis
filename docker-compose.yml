@@ -1,0 +1,17 @@
+services:
+  runalyze:
+    build: .
+    image: runalyze
+    container_name: runalyze
+    ports:
+      - "8080:8080"
+    environment:
+      - APP_HOST=0.0.0.0
+      - APP_SHOW=0
+      # APP_PORT 默认 8080
+      # 活动时间按本地时区显示；不设则容器内为 UTC（时间会偏移）。按你所在地改。
+      - TZ=Asia/Shanghai
+    volumes:
+      # 持久化数据库与上传原件；重建容器数据不丢
+      - ./data:/app/data
+    restart: unless-stopped

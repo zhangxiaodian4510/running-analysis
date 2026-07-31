@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+*.pyo
+.git/
+.gitignore
+.venv/
+venv/
+env/
+
+# 不把本地数据库/上传文件烤进镜像（用卷挂载）
+data/
+
+# 编辑器/系统
+.vscode/
+.idea/
+.DS_Store
