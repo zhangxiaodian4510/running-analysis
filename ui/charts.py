@@ -70,26 +70,97 @@ def pace_trend_option(df) -> dict:
     d = df.dropna(subset=["pace_s_per_km"])
     if d.empty:
         return _empty("暂无数据")
+    avg_hr = d["avg_hr"].round(0).tolist()
     pace_min = (d["pace_s_per_km"] / 60.0).round(2).tolist()
     roll = (d.get("pace_rolling", d["pace_s_per_km"]) / 60.0).round(2).tolist()
     return {
         "backgroundColor": "transparent",
         "textStyle": _ink_text(),
-        "legend": {"data": ["周配速", "4周均线"], "textStyle": {"color": T.INK2}, "top": 0},
+        "legend": {
+            "data": [
+                "周配速",
+                "4周均线",
+                "平均心率"
+            ],
+            "textStyle": {
+                "color": T.INK2
+            },
+            "top": 0
+        },
         "grid": {"left": 40, "right": 16, "top": 36, "bottom": 28, "containLabel": True},
         "tooltip": {"trigger": "axis", "backgroundColor": T.SURFACE2, "borderColor": T.GRID,
-                    "textStyle": {"color": T.INK}, ":formatter": _PACE_AXIS_TIP},
+                    "textStyle": {"color": T.INK}, ":formatter": _TREND_AXIS_TIP},
         "xAxis": {"type": "category", "boundaryGap": False, "data": d["label"].tolist(), **_axis_line()},
-        "yAxis": {"type": "value", "name": "配速 (min/km)", "nameTextStyle": {"color": T.MUTED},
-                  "scale": True, **_axis_line()},
-        "series": [
-            {"name": "周配速", "type": "line", "smooth": True, "symbol": "circle", "symbolSize": 6,
-             "data": pace_min, "lineStyle": {"width": 2, "color": T.BLUE},
-             "itemStyle": {"color": T.BLUE}},
-            {"name": "4周均线", "type": "line", "smooth": True, "symbol": "none",
-             "data": roll, "lineStyle": {"width": 3, "color": T.ORANGE, "type": "dashed"},
-             "itemStyle": {"color": T.ORANGE}},
+
+        "yAxis": [
+            {
+                "type": "value",
+                "name": "配速 (min/km)",
+                "nameTextStyle": {"color": T.MUTED},
+                "scale": True,
+                "inverse": True,
+                **_axis_line()
+            },
+            {
+                "type": "value",
+                "name": "心率 (bpm)",
+                "nameTextStyle": {"color": T.MUTED},
+                "scale": True,
+                "position": "right",
+                **_axis_line()
+            }
         ],
+
+        "series": [
+            {
+                "name": "周配速",
+                "type": "line",
+                "smooth": True,
+                "symbol": "circle",
+                "symbolSize": 6,
+                "yAxisIndex": 0,
+                "data": pace_min,
+                "lineStyle": {
+                    "width": 2,
+                    "color": T.BLUE
+                },
+                "itemStyle": {
+                    "color": T.BLUE
+                },
+            },
+            {
+                "name": "4周均线",
+                "type": "line",
+                "smooth": True,
+                "symbol": "none",
+                "yAxisIndex": 0,
+                "data": roll,
+                "lineStyle": {
+                    "width": 3,
+                    "color": T.ORANGE,
+                    "type": "dashed"
+                },
+                "itemStyle": {
+                    "color": T.ORANGE
+                },
+            },
+            {
+                "name": "平均心率",
+                "type": "line",
+                "smooth": True,
+                "symbol": "circle",
+                "symbolSize": 6,
+                "yAxisIndex": 1,
+                "data": avg_hr,
+                "lineStyle": {
+                    "width": 2,
+                    "color": T.GREEN
+                },
+                "itemStyle": {
+                    "color": T.GREEN
+                },
+            }
+        ]
     }
 
 
@@ -140,8 +211,58 @@ _MS_FMT = ("(v) => { v = Number(v) || 0; var m = Math.floor(v); var s = Math.rou
 _PACE_FMT = ("(v) => { v = Number(v) || 0; var m = Math.floor(v); var s = Math.round((v - m) * 60); if (s >= 60) { m += 1; s = s - 60; } return m + ':' + String(s).padStart(2, '0'); }")
 
 # 配速轴 tooltip formatter（用于 axis trigger）：接收数组参数，格式化每个数据点的配速值
-_PACE_AXIS_TIP = ("(p) => { return p.map(function(x){ var v = Number(x.value) || 0; var m = Math.floor(v); var s = Math.round((v - m) * 60); if (s >= 60) { m += 1; s = s - 60; } return x.marker + x.seriesName + ': ' + m + ':' + String(s).padStart(2, '0'); }).join('<br/>'); }")
+_TREND_AXIS_TIP = """
+(p) => {
+    if (!p || p.length === 0) {
+        return '';
+    }
 
+    var result = [];
+
+    // 日期
+    result.push(p[0].axisValue);
+
+    p.forEach(function(x) {
+
+        if (x.seriesName === '周配速' || x.seriesName === '4周均线') {
+
+            var v = Number(x.value) || 0;
+            var m = Math.floor(v);
+            var s = Math.round((v - m) * 60);
+
+            if (s >= 60) {
+                m += 1;
+                s -= 60;
+            }
+
+            result.push(
+                x.marker + x.seriesName + ': ' +
+                m + ':' +
+                String(s).padStart(2, '0') +
+                ' min/km'
+            );
+
+        } else if (x.seriesName === '平均心率') {
+
+            result.push(
+                x.marker + x.seriesName + ': ' +
+                Number(x.value).toFixed(0) +
+                ' bpm'
+            );
+
+        } else {
+
+            result.push(
+                x.marker + x.seriesName + ': ' +
+                x.value
+            );
+        }
+
+    });
+
+    return result.join('<br/>');
+}
+"""
 # 时间轴 tooltip 头：把悬停点 x(分钟) 显示成 m:ss
 _MS_TIP = ("(p) => { var v = p[0].value[0]; var m = Math.floor(v); var s = Math.round((v - m) * 60); if (s >= 60) { m += 1; s = 0; } return (m + ':' + String(s).padStart(2, '0')) + '<br/>' + p.map(function(x){ return x.marker + x.seriesName + ': ' + x.value[1]; }).join('<br/>'); }")
 

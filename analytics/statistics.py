@@ -74,6 +74,14 @@ def _resample(df: pd.DataFrame, rule: str) -> pd.DataFrame:
         count=("id", "count"),
         ele_gain_m=("ele_gain_m", "sum"),
     )
+    if "avg_hr" in s.columns:
+        hr_time_sum = (
+            s["avg_hr"] * s["duration_s"]
+        ).resample(rule).sum()
+
+        g["avg_hr"] = (
+            hr_time_sum / g["duration_s"]
+        )
     g = g[g["count"] > 0].copy()
     g["distance_km"] = g["distance_m"] / 1000.0
     g["duration_h"] = g["duration_s"] / 3600.0

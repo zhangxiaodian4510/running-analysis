@@ -124,21 +124,10 @@ def render(nav):
     with ui.row().classes("w-full").style("align-items:stretch;gap:14px"):
         with ui.column().style("flex:1;gap:6px"):
             # 周均配速：按周聚合配速 (pace_s_per_km)
-            pace_agg = _weekly_metric(df, "pace_s_per_km")
+            pace_agg = wk.rename(columns={"pace_s_per_km": "value"})
             ui.echart(charts.metric_trend_option(pace_agg, "value", "周均配速", T.BLUE, "min/km")).style("height:260px")
         with ui.column().style("flex:1;gap:6px"):
             # 周均心率：按周聚合活动均心率
-            hr_agg = _weekly_metric(df, "avg_hr")
+            hr_agg = wk.rename(columns={"avg_hr": "value"})
             ui.echart(charts.metric_trend_option(hr_agg, "value", "周均心率", T.RED, "bpm")).style("height:260px")
 
-
-def _weekly_metric(df, col):
-    import pandas as pd
-    if df is None or df.empty:
-        return pd.DataFrame()
-    d = df.dropna(subset=["dt", col]).copy()
-    d[col] = d[col].astype(float)
-    g = d.set_index("dt").resample("W-MON").agg(value=(col, "mean"), count=(col, "count"))
-    g = g[g["count"] > 0].copy()
-    g["label"] = g.index.strftime("%m-%d")
-    return g.reset_index()
