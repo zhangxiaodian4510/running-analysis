@@ -13,10 +13,10 @@ def render(nav):
 
     with ui.card().classes("panel").style("max-width:520px"):
         units_sel = ui.select(
-            options=[
-                {"label": "公制（km / min·km⁻¹）", "value": "metric"},
-                {"label": "英制（mi / min·mi⁻¹）", "value": "imperial"},
-            ],
+            options={
+                "metric": "公制（km / min·km⁻¹）",
+                "imperial": "英制（mi / min·mi⁻¹）",
+            },
             value=settings.units(),
             label="单位",
         ).classes("w-full")

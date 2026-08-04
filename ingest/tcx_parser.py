@@ -73,13 +73,17 @@ def parse(path: str, filename: str) -> Activity:
             hrel = tp.find(_q("HeartRateBpm"))
             if hrel is not None:
                 hr = num(_text(hrel, _q("Value")))
-            speed = cadence = None
+            speed = cadence = stride = vo = gct = None
             ext = tp.find(_q("Extensions"))
             if ext is not None:
                 tpx_el = ext.find(f"{{{TPX}}}TPX")
                 if tpx_el is not None:
                     speed = num(_text(tpx_el, f"{{{TPX}}}Speed"))
                     cadence = num(_text(tpx_el, f"{{{TPX}}}RunCadence"))
+                    # 跑步动力学（Apple Health / Runalyze 扩展，单位已是内部标准）
+                    stride = num(_text(tpx_el, f"{{{TPX}}}StrideLength"))            # m
+                    vo = num(_text(tpx_el, f"{{{TPX}}}VerticalOscillation"))        # cm
+                    gct = num(_text(tpx_el, f"{{{TPX}}}GroundContactTime"))         # ms
             # 也可能直接有 Cadence 节点
             if cadence is None:
                 cadence = num(_text(tp, _q("Cadence")))
@@ -93,6 +97,7 @@ def parse(path: str, filename: str) -> Activity:
                     distance_m=num(_text(tp, _q("DistanceMeters"))),
                     altitude_m=num(_text(tp, _q("AltitudeMeters"))),
                     lat=lat, lon=lon,
+                    stride_length_m=stride, vertical_oscillation_cm=vo, stance_time_ms=gct,
                 )
             )
 

@@ -80,6 +80,9 @@ def _activity_row(act: Activity) -> dict:
         "avg_hr": act.avg_hr,
         "max_hr": act.max_hr,
         "avg_cadence": act.avg_cadence,
+        "avg_stride_length": act.avg_stride_length,
+        "avg_vertical_oscillation": act.avg_vertical_oscillation,
+        "avg_stance_time": act.avg_stance_time,
         "avg_power": act.avg_power,
         "calories": act.calories,
         "ele_gain_m": act.ele_gain_m,
@@ -99,6 +102,9 @@ def _record_row(r) -> dict:
         "lat": r.lat,
         "lon": r.lon,
         "power": r.power,
+        "stride_length_m": r.stride_length_m,
+        "vertical_oscillation_cm": r.vertical_oscillation_cm,
+        "stance_time_ms": r.stance_time_ms,
     }
 
 

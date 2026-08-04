@@ -42,7 +42,6 @@ def render(nav, activity_id):
         stat_tile("平均配速", U.fmt_pace(pace), "min/km", T.ORANGE)
         stat_tile("均心率", U.fmt_int(act["avg_hr"], " bpm"), color=T.RED)
         stat_tile("最大心率", U.fmt_int(act["max_hr"], " bpm"))
-        stat_tile("步频", U.fmt_int(act["avg_cadence"], " spm"))
         stat_tile("爬升", U.fmt_int(act["ele_gain_m"], " m"), color=T.SERIES[2])
         stat_tile("热量", U.fmt_calories(act["calories"]))
 
@@ -62,6 +61,42 @@ def render(nav, activity_id):
                 ui.label(title).classes("section-title").style("margin:2px 0 0 2px")
                 # 2. 核心修改：增加 width:100%，让 ECharts 图表撑满卡片内部区域
                 ui.echart(opt).style("width:100%; height:220px")
+
+        # 跑步动力学：左平均卡 + 右散点图（仅有数据时显示）
+        dyn = charts.dynamics_scatter_options(recs)
+        avg_stride = act["avg_stride_length"]
+        avg_vo = act["avg_vertical_oscillation"]
+        avg_stance = act["avg_stance_time"]
+        if dyn or any(v is not None for v in (avg_stride, avg_vo, avg_stance)):
+            section_title("跑步动力学")
+            cad = act["avg_cadence"]
+            ratio = (avg_vo / avg_stride) if (avg_vo and avg_stride) else None  # cm/m 即 %
+            flight = (60000.0 / cad - avg_stance) if (cad and avg_stance) else None
+            with ui.row().classes("w-full").style("align-items:stretch;gap:14px"):
+                # 左：平均数据（两列：步频/步幅 · 振幅/比例 · 着地/腾空）
+                with ui.column().style("flex:0 0 300px;gap:8px"):
+                    with ui.row().classes("w-full dyn-cols"):
+                        stat_tile("步频", U.fmt_int(cad, " spm"), color="#c98500")
+                        stat_tile("步幅", U.fmt_stride(avg_stride), color=T.SERIES[6])
+                    with ui.row().classes("w-full dyn-cols"):
+                        stat_tile("垂直振幅", U.fmt_vertical_oscillation(avg_vo), color=T.SERIES[5])
+                        stat_tile("垂直比例", U.fmt_ratio(ratio), color=T.SERIES[4])
+                    with ui.row().classes("w-full dyn-cols"):
+                        stat_tile("着地时间", U.fmt_ms(avg_stance), color=T.SERIES[1])
+                        stat_tile("腾空时间", U.fmt_ms(flight), color=T.SERIES[7])
+                # 右：散点图（tab 切换，类似 Runalyze）
+                with ui.column().style("flex:1;gap:6px;min-width:0"):
+                    if dyn:
+                        with ui.card().classes("panel w-full").style("padding:10px 14px"):
+                            with ui.tabs().props("dense").classes("w-full") as tabs:
+                                for label, _ in dyn:
+                                    ui.tab(label)
+                            with ui.tab_panels(tabs, value=dyn[0][0]).classes("w-full"):
+                                for label, opt in dyn:
+                                    with ui.tab_panel(label):
+                                        ui.echart(opt).style("width:100%; height:340px")
+                    else:
+                        ui.label("无跑步动力学采样数据").classes("muted")
 
     # 心率区间 + 分圈
     has_zones = bool(recs["hr"].notna().any()) if not recs.empty else False

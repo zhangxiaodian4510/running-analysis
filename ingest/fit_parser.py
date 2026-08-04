@@ -22,6 +22,16 @@ def _utc(dt: Optional[datetime]) -> Optional[datetime]:
     return dt
 
 
+def _m_from_mm(v) -> Optional[float]:
+    """FIT step_length 单位为 mm → 米。"""
+    return (v / 1000.0) if v else None
+
+
+def _cm_from_mm(v) -> Optional[float]:
+    """FIT vertical_oscillation 单位为 mm → 厘米。"""
+    return (v / 10.0) if v else None
+
+
 def _record_dict(msg) -> dict:
     d = {}
     for f in msg:
@@ -51,6 +61,9 @@ def _read_record(msg) -> Optional[Record]:
         lat=(lat * SEMICIRCLES) if lat is not None else None,
         lon=(lon * SEMICIRCLES) if lon is not None else None,
         power=num(d.get("power")),
+        stride_length_m=_m_from_mm(num(d.get("step_length"))),
+        vertical_oscillation_cm=_cm_from_mm(num(d.get("vertical_oscillation"))),
+        stance_time_ms=num(d.get("stance_time")),
     )
 
 
@@ -132,6 +145,9 @@ def parse(path: str, filename: str) -> Activity:
         avg_hr=num(session.get("avg_heart_rate")),
         max_hr=num(session.get("max_heart_rate")),
         avg_cadence=num(session.get("avg_running_cadence")) or num(session.get("avg_cadence")),
+        avg_stride_length=_m_from_mm(num(session.get("avg_step_length"))),
+        avg_vertical_oscillation=_cm_from_mm(num(session.get("avg_vertical_oscillation"))),
+        avg_stance_time=num(session.get("avg_stance_time")),
         avg_power=num(session.get("avg_power")),
         calories=num(session.get("total_calories")),
         ele_gain_m=num(session.get("total_ascent")),

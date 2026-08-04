@@ -237,7 +237,26 @@ def collect_records(export_path, workouts):
 # GPX 读取
 # --------------------------------------------------------------------------- #
 def read_gpx(path):
-    """返回 [{t, lat, lon, ele, speed}], 按 t 升序。失败返回 []。"""
+    """读取 GPX 文件。path 可以是相对路径或绝对路径; 自动在 ./workout-routes/, ./../workout-routes/ 中查找。
+    如果找到则使用该路径, 否则返回空列表(跳过该运动)。
+    """
+    if os.path.isabs(path):
+        if os.path.exists(path):
+            gpx_path = path
+        else:
+            return []
+    else:
+        gpx_path = None
+        # 去掉前导斜杠(如果有的话)以标准化
+        rel_path = path.lstrip("/")
+        # 尝试多个常见位置: 当前目录, ./workout-routes/, ../workout-routes/
+        for base in ['.', 'workout-routes', '../workout-routes']:
+            candidate = os.path.join(base, rel_path)
+            if os.path.exists(candidate):
+                gpx_path = candidate
+                break
+        if not gpx_path:
+            return []
     pts = []
     try:
         for _, elem in ET.iterparse(path, events=("end",)):

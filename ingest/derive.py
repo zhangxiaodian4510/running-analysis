@@ -43,6 +43,16 @@ def finalize(act: Activity) -> Activity:
     if cads.size:
         act.avg_cadence = float(np.mean(cads))
 
+    strides = np.array([r.stride_length_m for r in recs if r.stride_length_m is not None], dtype=float)
+    if strides.size:
+        act.avg_stride_length = float(np.mean(strides))
+    vos = np.array([r.vertical_oscillation_cm for r in recs if r.vertical_oscillation_cm is not None], dtype=float)
+    if vos.size:
+        act.avg_vertical_oscillation = float(np.mean(vos))
+    stances = np.array([r.stance_time_ms for r in recs if r.stance_time_ms is not None], dtype=float)
+    if stances.size:
+        act.avg_stance_time = float(np.mean(stances))
+
     alts = np.array([r.altitude_m for r in recs if r.altitude_m is not None], dtype=float)
     if alts.size >= 2:
         sm = _smooth(alts, 15)

@@ -65,6 +65,34 @@ def fmt_int(x, suffix: str = "") -> str:
     return f"{int(round(x))}{suffix}"
 
 
+def fmt_stride(m) -> str:
+    """米 → '1.18 m'。"""
+    if m is None or m != m:
+        return "—"
+    return f"{m:.2f} m"
+
+
+def fmt_vertical_oscillation(cm) -> str:
+    """厘米 → '7.4 cm'。"""
+    if cm is None or cm != cm:
+        return "—"
+    return f"{cm:.1f} cm"
+
+
+def fmt_ratio(pct) -> str:
+    """百分比 → '6.2 %'。"""
+    if pct is None or pct != pct:
+        return "—"
+    return f"{pct:.1f} %"
+
+
+def fmt_ms(ms) -> str:
+    """毫秒 → '242 ms'。"""
+    if ms is None or ms != ms:
+        return "—"
+    return f"{int(round(ms))} ms"
+
+
 def fmt_calories(kcal) -> str:
     if not kcal or kcal != kcal:
         return "—"

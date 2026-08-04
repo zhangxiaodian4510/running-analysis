@@ -203,6 +203,24 @@ def _pace_values(d):
     return np.where(spd > 0, 1000.0 / (spd * 60.0), np.nan)
 
 
+def _ratio_values(d):
+    """垂直比例 (%) = 垂直振幅cm / 步幅m（cm/m 的数值即百分比，无需再 ×100）。"""
+    vo = d.get("vertical_oscillation_cm", pd_nans(d))
+    st = d.get("stride_length_m", pd_nans(d))
+    return np.where((st > 0) & np.isfinite(st) & np.isfinite(vo), vo / st, np.nan)
+
+
+def _stance_values(d):
+    return d.get("stance_time_ms", pd_nans(d)).to_numpy()
+
+
+def _flight_values(d):
+    """腾空时间 (ms) = 步周期 − 着地时间；步周期 = 60/步频（每分钟步数）。"""
+    cad = d.get("cadence", pd_nans(d))
+    stance = d.get("stance_time_ms", pd_nans(d))
+    return np.where((cad > 0) & np.isfinite(cad) & np.isfinite(stance), 60000.0 / cad - stance, np.nan)
+
+
 # 分钟(小数) → "m:ss"。走 NiceGUI 动态属性 :formatter（前端 convertDynamicProperties 转成 JS；
 # 若转换失败则回退默认数值刻度，图仍能渲染）。
 _MS_FMT = ("(v) => { v = Number(v) || 0; var m = Math.floor(v); var s = Math.round((v - m) * 60); if (s >= 60) { m += 1; s = s - 60; } return m + ':' + String(s).padStart(2, '0'); }")
@@ -266,6 +284,19 @@ _TREND_AXIS_TIP = """
 # 时间轴 tooltip 头：把悬停点 x(分钟) 显示成 m:ss
 _MS_TIP = ("(p) => { var v = p[0].value[0]; var m = Math.floor(v); var s = Math.round((v - m) * 60); if (s >= 60) { m += 1; s = 0; } return (m + ':' + String(s).padStart(2, '0')) + '<br/>' + p.map(function(x){ return x.marker + x.seriesName + ': ' + x.value[1]; }).join('<br/>'); }")
 
+# 散点 tooltip（trigger=item）：p.value = [分钟, 数值]，时间显示为 m:ss，数值按量级取舍小数
+_SCATTER_TIP = (
+    "(p) => {"
+    " var t = p.value[0];"
+    " var m = Math.floor(t);"
+    " var s = Math.round((t - m) * 60);"
+    " if (s >= 60) { m += 1; s = 0; }"
+    " var y = Number(p.value[1]);"
+    " var ys = (y >= 100 ? Math.round(y) : y.toFixed(2));"
+    " return p.marker + p.seriesName + '<br/>' + m + ':' + String(s).padStart(2, '0') + ' · ' + ys;"
+    " }"
+)
+
 
 def _visible_axis_lines():
     """可见的轴线/刻度：默认 _axis_line() 的 GRID 色(#2c2c2a)在深色卡片(#222220)上几乎看不见。"""
@@ -306,8 +337,111 @@ def _time_series_option(recs_df, title: str, ylabel: str, color: str, value_fn, 
     }
 
 
+def _dual_time_series_option(recs_df, name_a, color_a, value_fn_a,
+                             name_b, color_b, value_fn_b, ylabel) -> dict:
+    """两条共用 y 轴的曲线（如着地时间 + 腾空时间，单位均为 ms）。"""
+    if recs_df is None or recs_df.empty:
+        return _empty("无采样数据")
+    t = (recs_df["elapsed_s"].astype(float) / 60.0).to_numpy()
+    ya = _pairs(t, value_fn_a(recs_df))
+    yb = _pairs(t, value_fn_b(recs_df))
+    if not ya and not yb:
+        return _empty("无数据")
+    series = [
+        {"name": name_a, "type": "line", "data": ya, "smooth": True, "showSymbol": False,
+         "lineStyle": {"width": 2, "color": color_a}, "itemStyle": {"color": color_a}},
+        {"name": name_b, "type": "line", "data": yb, "smooth": True, "showSymbol": False,
+         "lineStyle": {"width": 2, "color": color_b}, "itemStyle": {"color": color_b}},
+    ]
+    return {
+        "backgroundColor": "transparent",
+        "textStyle": _ink_text(),
+        "legend": {"data": [name_a, name_b], "textStyle": {"color": T.INK2}, "top": 0},
+        "grid": {"left": 50, "right": 20, "top": 30, "bottom": 30, "containLabel": True},
+        "tooltip": {"trigger": "axis", "axisPointer": {"type": "line"},
+                    "backgroundColor": T.SURFACE2, "borderColor": T.GRID, "textStyle": {"color": T.INK},
+                    ":formatter": _MS_TIP},
+        "xAxis": {**_visible_axis_lines(), "type": "value", "min": 0, "name": "时间",
+                  "nameTextStyle": {"color": T.MUTED},
+                  "axisLabel": {"color": T.MUTED, ":formatter": _MS_FMT}},
+        "yAxis": {**_visible_axis_lines(), "type": "value", "name": ylabel, "scale": True,
+                  "nameTextStyle": {"color": T.MUTED}, "axisLabel": {"color": T.MUTED}},
+        "series": series,
+    }
+
+
+def _col_has(d, col) -> bool:
+    """列存在且至少有一个非空值。"""
+    s = d.get(col)
+    return s is not None and bool(s.notna().any())
+
+
+def _scatter_option(recs_df, title: str, ylabel: str, color: str, value_fn) -> dict:
+    """单系列散点图：横轴时间(分钟)，纵轴对应指标。用于跑步动力学原始采样。"""
+    if recs_df is None or recs_df.empty:
+        return _empty("无采样数据")
+    t = (recs_df["elapsed_s"].astype(float) / 60.0).to_numpy()
+    y = value_fn(recs_df)
+    data = _pairs(t, y, max_n=900)
+    if not data:
+        return _empty("无数据")
+    series = {
+        "name": title, "type": "scatter", "data": data, "symbolSize": 6,
+        "itemStyle": {"color": color, "opacity": 0.72},
+        "emphasis": {"scale": True, "focus": "none", "itemStyle": {"borderColor": T.INK, "borderWidth": 1.5, "shadowBlur": 6, "shadowColor": "rgba(0,0,0,0.5)"}},
+    }
+    return {
+        "backgroundColor": "transparent",
+        "textStyle": _ink_text(),
+        "grid": {"left": 50, "right": 20, "top": 18, "bottom": 30, "containLabel": True},
+        "tooltip": {"trigger": "item", "backgroundColor": T.SURFACE2, "borderColor": T.GRID,
+                    "textStyle": {"color": T.INK}, ":formatter": _SCATTER_TIP},
+        "xAxis": {**_visible_axis_lines(), "type": "value", "min": 0, "name": "时间",
+                  "nameTextStyle": {"color": T.MUTED},
+                  "axisLabel": {"color": T.MUTED, ":formatter": _MS_FMT}},
+        "yAxis": {**_visible_axis_lines(), "type": "value", "name": ylabel, "scale": True,
+                  "nameTextStyle": {"color": T.MUTED}, "axisLabel": {"color": T.MUTED}},
+        "series": [series],
+    }
+
+
+def _dual_scatter_option(recs_df, name_a, color_a, value_fn_a,
+                         name_b, color_b, value_fn_b, ylabel) -> dict:
+    """两系列散点图（共用 y 轴），如着地时间 + 腾空时间（单位均为 ms）。"""
+    if recs_df is None or recs_df.empty:
+        return _empty("无采样数据")
+    t = (recs_df["elapsed_s"].astype(float) / 60.0).to_numpy()
+    ya = _pairs(t, value_fn_a(recs_df), max_n=900)
+    yb = _pairs(t, value_fn_b(recs_df), max_n=900)
+    if not ya and not yb:
+        return _empty("无数据")
+    series = [
+        {"name": name_a, "type": "scatter", "data": ya, "symbolSize": 6,
+         "itemStyle": {"color": color_a, "opacity": 0.72},
+         "emphasis": {"scale": True, "focus": "none", "itemStyle": {"borderColor": T.INK, "borderWidth": 1.5, "shadowBlur": 6, "shadowColor": "rgba(0,0,0,0.5)"}}},
+        {"name": name_b, "type": "scatter", "data": yb, "symbolSize": 6,
+         "itemStyle": {"color": color_b, "opacity": 0.72},
+         "emphasis": {"scale": True, "focus": "none", "itemStyle": {"borderColor": T.INK, "borderWidth": 1.5, "shadowBlur": 6, "shadowColor": "rgba(0,0,0,0.5)"}}},
+    ]
+    return {
+        "backgroundColor": "transparent",
+        "textStyle": _ink_text(),
+        "legend": {"data": [name_a, name_b], "textStyle": {"color": T.INK2}, "top": 0},
+        "grid": {"left": 50, "right": 20, "top": 30, "bottom": 30, "containLabel": True},
+        "tooltip": {"trigger": "item", "backgroundColor": T.SURFACE2, "borderColor": T.GRID,
+                    "textStyle": {"color": T.INK}, ":formatter": _SCATTER_TIP},
+        "xAxis": {**_visible_axis_lines(), "type": "value", "min": 0, "name": "时间",
+                  "nameTextStyle": {"color": T.MUTED},
+                  "axisLabel": {"color": T.MUTED, ":formatter": _MS_FMT}},
+        "yAxis": {**_visible_axis_lines(), "type": "value", "name": ylabel, "scale": True,
+                  "nameTextStyle": {"color": T.MUTED}, "axisLabel": {"color": T.MUTED}},
+        "series": series,
+    }
+
+
 def detail_series_options(recs_df) -> list:
-    """返回 [(标题, option), ...]：配速 / 心率 / 海拔 / 步频，各一张独立图。"""
+    """基础曲线（横轴为时间）：配速 / 心率 / 海拔。
+    步频与跑步动力学散点图见 dynamics_scatter_options。"""
     return [
         ("配速 (min/km)", _time_series_option(
             recs_df, "配速", "配速 (min/km)", T.BLUE, _pace_values)),
@@ -316,10 +450,35 @@ def detail_series_options(recs_df) -> list:
         ("海拔 (m)", _time_series_option(
             recs_df, "海拔", "海拔 (m)", T.GREEN,
             lambda d: d.get("altitude_m", pd_nans(d)).to_numpy(), area=True)),
-        ("步频 (spm)", _time_series_option(
-            recs_df, "步频", "步频 (spm)", "#c98500",
-            lambda d: d.get("cadence", pd_nans(d)).to_numpy())),
     ]
+
+
+def dynamics_scatter_options(recs_df) -> list:
+    """跑步动力学散点图：返回 [(tab 标题, option), ...]，仅含数据存在的项。
+    顺序：步频 → 步幅 → 垂直振幅 → 垂直比例 → 着地/腾空。"""
+    out: list = []
+    if recs_df is None or recs_df.empty:
+        return out
+    if _col_has(recs_df, "cadence"):
+        out.append(("步频", _scatter_option(
+            recs_df, "步频", "步频 (spm)", "#c98500",
+            lambda d: d.get("cadence", pd_nans(d)).to_numpy())))
+    if _col_has(recs_df, "stride_length_m"):
+        out.append(("步幅", _scatter_option(
+            recs_df, "步幅", "步幅 (m)", T.SERIES[6],
+            lambda d: d.get("stride_length_m", pd_nans(d)).to_numpy())))
+    if _col_has(recs_df, "vertical_oscillation_cm"):
+        out.append(("振幅", _scatter_option(
+            recs_df, "垂直振幅", "垂直振幅 (cm)", T.SERIES[5],
+            lambda d: d.get("vertical_oscillation_cm", pd_nans(d)).to_numpy())))
+    if _col_has(recs_df, "stride_length_m") and _col_has(recs_df, "vertical_oscillation_cm"):
+        out.append(("垂直比例", _scatter_option(
+            recs_df, "垂直比例", "垂直比例 (%)", T.SERIES[4], _ratio_values)))
+    if _col_has(recs_df, "stance_time_ms") and _col_has(recs_df, "cadence"):
+        out.append(("着地/腾空", _dual_scatter_option(
+            recs_df, "着地时间", T.SERIES[1], _stance_values,
+            "腾空时间", T.SERIES[7], _flight_values, "着地/腾空 (ms)")))
+    return out
 
 
 def pd_nans(d):

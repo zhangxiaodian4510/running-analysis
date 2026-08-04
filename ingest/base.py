@@ -17,6 +17,9 @@ class Record:
     lat: Optional[float] = None
     lon: Optional[float] = None
     power: Optional[float] = None
+    stride_length_m: Optional[float] = None           # 步幅 (m)
+    vertical_oscillation_cm: Optional[float] = None   # 垂直振幅 (cm)
+    stance_time_ms: Optional[float] = None            # 着地时间 (ms)
     ts: Optional[datetime] = None  # 解析期临时用，不入库
 
 
@@ -48,6 +51,9 @@ class Activity:
     avg_hr: Optional[float] = None
     max_hr: Optional[float] = None
     avg_cadence: Optional[float] = None
+    avg_stride_length: Optional[float] = None           # 平均步幅 (m)
+    avg_vertical_oscillation: Optional[float] = None    # 平均垂直振幅 (cm)
+    avg_stance_time: Optional[float] = None             # 平均着地时间 (ms)
     avg_power: Optional[float] = None
     calories: Optional[float] = None
     ele_gain_m: Optional[float] = None

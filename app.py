@@ -7,12 +7,13 @@ from __future__ import annotations
 
 import os
 
-from nicegui import ui
+from nicegui import app, ui
 
 from config import APP_NAME, APP_SUBTITLE
 from core import db, seed
 from ui import theme
 from ui.pages import activities, activity_detail, statistics as stats_page, import_page, settings_page
+from ui.map_view import ensure_leaflet
 
 # 客户端导航状态
 NAV_ITEMS = [
@@ -73,6 +74,7 @@ def main():
     theme.apply()
     ui.add_head_html(f"<style>{LAYOUT_CSS}</style>")
     ui.dark_mode(True)
+    ensure_leaflet()  # 页面级加载本地 Leaflet，供详情页轨迹使用
 
     drawer = ui.left_drawer(bordered=True, value=True).classes("app-drawer")
     with drawer:
@@ -103,6 +105,10 @@ def _init() -> None:
 
 
 _init()
+
+# 本地静态资源（Leaflet 等，避免依赖外部 CDN）
+app.add_static_files("/static", "static")
+
 ui.run(
     host=os.getenv("APP_HOST", "127.0.0.1"),
     port=int(os.getenv("APP_PORT", "8080")),

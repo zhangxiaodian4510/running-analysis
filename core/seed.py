@@ -53,6 +53,13 @@ def _make_one(rng: np.random.Generator, day_index: int, n_days: int, start_dt: d
     # 步频
     cad = np.clip(174 + rng.normal(0, 3, n), 150, 192)
 
+    # 跑步动力学（与速度/步频自洽：speed = cad/60 × stride）
+    stride = np.where(cad > 0, speed * 60.0 / cad, np.nan)
+    stride = np.clip(stride + rng.normal(0, 0.02, n), 0.6, 1.6)
+    # 垂直振幅(cm)：随强度略升；着地时间(ms)：步频越快越短
+    vo = np.clip(7.2 + rng.normal(0, 0.4, n) + (speed - base_speed) * 0.6, 5.5, 10.0)
+    stance = np.clip(246.0 - (cad - 174.0) * 1.2 + rng.normal(0, 6, n), 195, 295)
+
     # 轨迹：以总距离为周长的一个环（首尾接近闭合）
     circumference = dist[-1] if dist[-1] > 0 else distance_km * 1000
     radius = max(circumference / (2 * np.pi), 200.0)
@@ -67,6 +74,9 @@ def _make_one(rng: np.random.Generator, day_index: int, n_days: int, start_dt: d
             elapsed_s=float(t[i]), hr=float(hr[i]), cadence=float(cad[i]),
             speed_mps=float(speed[i]), distance_m=float(dist[i]),
             altitude_m=float(alt[i]), lat=float(lat[i]), lon=float(lon[i]), power=None,
+            stride_length_m=float(stride[i]),
+            vertical_oscillation_cm=float(vo[i]),
+            stance_time_ms=float(stance[i]),
         )
         for i in range(n)
     ]
@@ -88,6 +98,9 @@ def _make_one(rng: np.random.Generator, day_index: int, n_days: int, start_dt: d
         avg_hr=float(hr.mean()),
         max_hr=float(hr.max()),
         avg_cadence=float(cad.mean()),
+        avg_stride_length=float(stride.mean()),
+        avg_vertical_oscillation=float(vo.mean()),
+        avg_stance_time=float(stance.mean()),
         avg_power=None,
         calories=float(distance_km * 62 * float(rng.uniform(0.9, 1.1))),
         ele_gain_m=ele_gain,

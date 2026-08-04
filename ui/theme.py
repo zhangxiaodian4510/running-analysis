@@ -57,6 +57,8 @@ body {{ background: radial-gradient(1200px 700px at 80% -10%, #1d2230 0%, {SURFA
 .stat-sub {{ font-size:.78rem; color:{INK2}; }}
 
 .kpi-row {{ display:flex; gap:14px; flex-wrap:wrap; }}
+.dyn-cols {{ display:flex; gap:8px; }}
+.dyn-cols > .stat-tile {{ flex:1 1 140px; min-width:0; }}
 
 /* 地图容器 */
 .map-wrap {{ border:1px solid {BORDER}; border-radius:14px; overflow:hidden; box-shadow:0 8px 22px rgba(0,0,0,.30); }}
