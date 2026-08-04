@@ -284,16 +284,26 @@ _TREND_AXIS_TIP = """
 # 时间轴 tooltip 头：把悬停点 x(分钟) 显示成 m:ss
 _MS_TIP = ("(p) => { var v = p[0].value[0]; var m = Math.floor(v); var s = Math.round((v - m) * 60); if (s >= 60) { m += 1; s = 0; } return (m + ':' + String(s).padStart(2, '0')) + '<br/>' + p.map(function(x){ return x.marker + x.seriesName + ': ' + x.value[1]; }).join('<br/>'); }")
 
-# 散点 tooltip（trigger=item）：p.value = [分钟, 数值]，时间显示为 m:ss，数值按量级取舍小数
+# 动力学 tooltip：兼容 item(散点→单个 params) 与 axis(曲线→params 数组)；
+# p.value = [分钟, 数值]，时间格式化为 m:ss 作表头，数值按量级取舍小数。
 _SCATTER_TIP = (
     "(p) => {"
-    " var t = p.value[0];"
+    " var arr = Array.isArray(p) ? p : (p ? [p] : []);"
+    " if (!arr.length) return '';"
+    " var t = Number(arr[0].value && arr[0].value[0]);"
     " var m = Math.floor(t);"
     " var s = Math.round((t - m) * 60);"
     " if (s >= 60) { m += 1; s = 0; }"
-    " var y = Number(p.value[1]);"
-    " var ys = (y >= 100 ? Math.round(y) : y.toFixed(2));"
-    " return p.marker + p.seriesName + '<br/>' + m + ':' + String(s).padStart(2, '0') + ' · ' + ys;"
+    " var head = m + ':' + String(s).padStart(2, '0');"
+    " var lines = [];"
+    " arr.forEach(function(x) {"
+    "   if (!x || !x.value || x.value[1] == null || x.value[1] === '-') return;"
+    "   var y = Number(x.value[1]);"
+    "   if (!isFinite(y)) return;"
+    "   var ys = (Math.abs(y) >= 100 ? Math.round(y) : y.toFixed(2));"
+    "   lines.push((x.marker || '') + x.seriesName + ' · ' + ys);"
+    " });"
+    " return lines.length ? head + '<br/>' + lines.join('<br/>') : head;"
     " }"
 )
 
