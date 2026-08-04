@@ -376,8 +376,7 @@ def _col_has(d, col) -> bool:
     return s is not None and bool(s.notna().any())
 
 
-def _scatter_option(recs_df, title: str, ylabel: str, color: str, value_fn) -> dict:
-    """单系列散点图：横轴时间(分钟)，纵轴对应指标。用于跑步动力学原始采样。"""
+def _scatter_option(recs_df, title: str, ylabel: str, color: str, value_fn, chart_type: str = "scatter") -> dict:
     if recs_df is None or recs_df.empty:
         return _empty("无采样数据")
     t = (recs_df["elapsed_s"].astype(float) / 60.0).to_numpy()
@@ -385,59 +384,132 @@ def _scatter_option(recs_df, title: str, ylabel: str, color: str, value_fn) -> d
     data = _pairs(t, y, max_n=900)
     if not data:
         return _empty("无数据")
+
+    is_line = (chart_type == "line")
+
     series = {
-        "name": title, "type": "scatter", "data": data, "symbolSize": 6,
+        "name": title,
+        "type": "line" if is_line else "scatter",
+        "data": data,
         "itemStyle": {"color": color, "opacity": 0.72},
-        "emphasis": {"scale": True, "focus": "none", "itemStyle": {"borderColor": T.INK, "borderWidth": 1.5, "shadowBlur": 6, "shadowColor": "rgba(0,0,0,0.5)"}},
     }
+
+    if is_line:
+        # 曲线图配置：开启平滑、隐藏圆点（防止密集采样挤在一起）、设置线宽
+        series.update({
+            "smooth": True,
+            "showSymbol": False,
+            "lineStyle": {"width": 2, "color": color},
+        })
+    else:
+        # 散点图配置
+        series.update({
+            "symbolSize": 6,
+            "emphasis": {
+                "scale": True,
+                "focus": "none",
+                "itemStyle": {
+                    "borderColor": T.INK,
+                    "borderWidth": 1.5,
+                    "shadowBlur": 6,
+                    "shadowColor": "rgba(0,0,0,0.5)",
+                },
+            },
+        })
+
     return {
         "backgroundColor": "transparent",
         "textStyle": _ink_text(),
         "grid": {"left": 50, "right": 20, "top": 18, "bottom": 30, "containLabel": True},
-        "tooltip": {"trigger": "item", "backgroundColor": T.SURFACE2, "borderColor": T.GRID,
-                    "textStyle": {"color": T.INK}, ":formatter": _SCATTER_TIP},
-        "xAxis": {**_visible_axis_lines(), "type": "value", "min": 0, "name": "时间",
-                  "nameTextStyle": {"color": T.MUTED},
-                  "axisLabel": {"color": T.MUTED, ":formatter": _MS_FMT}},
-        "yAxis": {**_visible_axis_lines(), "type": "value", "name": ylabel, "scale": True,
-                  "nameTextStyle": {"color": T.MUTED}, "axisLabel": {"color": T.MUTED}},
+        # 曲线图用 axis 触发（移到时间轴上自动吸附数据点），散点图用 item 触发（鼠标悬停到单点）
+        "tooltip": {
+            "trigger": "axis" if is_line else "item",
+            "backgroundColor": T.SURFACE2,
+            "borderColor": T.GRID,
+            "textStyle": {"color": T.INK},
+            ":formatter": _SCATTER_TIP,
+        },
+        "xAxis": {
+            **_visible_axis_lines(),
+            "type": "value",
+            "min": 0,
+            "name": "时间",
+            "nameTextStyle": {"color": T.MUTED},
+            "axisLabel": {"color": T.MUTED, ":formatter": _MS_FMT},
+        },
+        "yAxis": {
+            **_visible_axis_lines(),
+            "type": "value",
+            "name": ylabel,
+            "scale": True,
+            "nameTextStyle": {"color": T.MUTED},
+            "axisLabel": {"color": T.MUTED},
+        },
         "series": [series],
     }
 
 
-def _dual_scatter_option(recs_df, name_a, color_a, value_fn_a,
-                         name_b, color_b, value_fn_b, ylabel) -> dict:
-    """两系列散点图（共用 y 轴），如着地时间 + 腾空时间（单位均为 ms）。"""
+def _dual_scatter_option(recs_df, title1: str, color1: str, value_fn1,
+                        title2: str, color2: str, value_fn2, ylabel: str, 
+                        chart_type: str = "scatter") -> dict:
     if recs_df is None or recs_df.empty:
         return _empty("无采样数据")
+
     t = (recs_df["elapsed_s"].astype(float) / 60.0).to_numpy()
-    ya = _pairs(t, value_fn_a(recs_df), max_n=900)
-    yb = _pairs(t, value_fn_b(recs_df), max_n=900)
-    if not ya and not yb:
+    d1 = _pairs(t, value_fn1(recs_df), max_n=900)
+    d2 = _pairs(t, value_fn2(recs_df), max_n=900)
+
+    if not d1 and not d2:
         return _empty("无数据")
-    series = [
-        {"name": name_a, "type": "scatter", "data": ya, "symbolSize": 6,
-         "itemStyle": {"color": color_a, "opacity": 0.72},
-         "emphasis": {"scale": True, "focus": "none", "itemStyle": {"borderColor": T.INK, "borderWidth": 1.5, "shadowBlur": 6, "shadowColor": "rgba(0,0,0,0.5)"}}},
-        {"name": name_b, "type": "scatter", "data": yb, "symbolSize": 6,
-         "itemStyle": {"color": color_b, "opacity": 0.72},
-         "emphasis": {"scale": True, "focus": "none", "itemStyle": {"borderColor": T.INK, "borderWidth": 1.5, "shadowBlur": 6, "shadowColor": "rgba(0,0,0,0.5)"}}},
-    ]
+
+    is_line = chart_type == "line"
+
+    def _make_series(name, data, color):
+        s = {
+            "name": name,
+            "type": "line" if is_line else "scatter",
+            "data": data,
+            "itemStyle": {"color": color, "opacity": 0.72},
+        }
+        if is_line:
+            s.update({"smooth": True, "showSymbol": False, "lineStyle": {"width": 2, "color": color}})
+        else:
+            s.update({"symbolSize": 6})
+        return s
+
+    s1 = _make_series(title1, d1, color1)
+    s2 = _make_series(title2, d2, color2)
+
     return {
         "backgroundColor": "transparent",
         "textStyle": _ink_text(),
-        "legend": {"data": [name_a, name_b], "textStyle": {"color": T.INK2}, "top": 0},
-        "grid": {"left": 50, "right": 20, "top": 30, "bottom": 30, "containLabel": True},
-        "tooltip": {"trigger": "item", "backgroundColor": T.SURFACE2, "borderColor": T.GRID,
-                    "textStyle": {"color": T.INK}, ":formatter": _SCATTER_TIP},
-        "xAxis": {**_visible_axis_lines(), "type": "value", "min": 0, "name": "时间",
-                  "nameTextStyle": {"color": T.MUTED},
-                  "axisLabel": {"color": T.MUTED, ":formatter": _MS_FMT}},
-        "yAxis": {**_visible_axis_lines(), "type": "value", "name": ylabel, "scale": True,
-                  "nameTextStyle": {"color": T.MUTED}, "axisLabel": {"color": T.MUTED}},
-        "series": series,
+        "grid": {"left": 50, "right": 20, "top": 18, "bottom": 30, "containLabel": True},
+        "legend": {"top": 0, "textStyle": {"color": T.INK}},
+        "tooltip": {
+            "trigger": "axis" if is_line else "item",
+            "backgroundColor": T.SURFACE2,
+            "borderColor": T.GRID,
+            "textStyle": {"color": T.INK},
+            ":formatter": _SCATTER_TIP,
+        },
+        "xAxis": {
+            **_visible_axis_lines(),
+            "type": "value",
+            "min": 0,
+            "name": "时间",
+            "nameTextStyle": {"color": T.MUTED},
+            "axisLabel": {"color": T.MUTED, ":formatter": _MS_FMT},
+        },
+        "yAxis": {
+            **_visible_axis_lines(),
+            "type": "value",
+            "name": ylabel,
+            "scale": True,
+            "nameTextStyle": {"color": T.MUTED},
+            "axisLabel": {"color": T.MUTED},
+        },
+        "series": [s1, s2],
     }
-
 
 def detail_series_options(recs_df) -> list:
     """基础曲线（横轴为时间）：配速 / 心率 / 海拔。
@@ -453,31 +525,36 @@ def detail_series_options(recs_df) -> list:
     ]
 
 
-def dynamics_scatter_options(recs_df) -> list:
-    """跑步动力学散点图：返回 [(tab 标题, option), ...]，仅含数据存在的项。
-    顺序：步频 → 步幅 → 垂直振幅 → 垂直比例 → 着地/腾空。"""
+def dynamics_scatter_options(recs_df, chart_type: str = "scatter") -> list:
+    """跑步动力学图表：返回 [(tab 标题, option), ...]，仅含数据存在的项。"""
     out: list = []
     if recs_df is None or recs_df.empty:
         return out
+
     if _col_has(recs_df, "cadence"):
         out.append(("步频", _scatter_option(
             recs_df, "步频", "步频 (spm)", "#c98500",
-            lambda d: d.get("cadence", pd_nans(d)).to_numpy())))
+            lambda d: d.get("cadence", pd_nans(d)).to_numpy(), chart_type=chart_type)))
+
     if _col_has(recs_df, "stride_length_m"):
         out.append(("步幅", _scatter_option(
             recs_df, "步幅", "步幅 (m)", T.SERIES[6],
-            lambda d: d.get("stride_length_m", pd_nans(d)).to_numpy())))
+            lambda d: d.get("stride_length_m", pd_nans(d)).to_numpy(), chart_type=chart_type)))
+
     if _col_has(recs_df, "vertical_oscillation_cm"):
         out.append(("振幅", _scatter_option(
             recs_df, "垂直振幅", "垂直振幅 (cm)", T.SERIES[5],
-            lambda d: d.get("vertical_oscillation_cm", pd_nans(d)).to_numpy())))
+            lambda d: d.get("vertical_oscillation_cm", pd_nans(d)).to_numpy(), chart_type=chart_type)))
+
     if _col_has(recs_df, "stride_length_m") and _col_has(recs_df, "vertical_oscillation_cm"):
         out.append(("垂直比例", _scatter_option(
-            recs_df, "垂直比例", "垂直比例 (%)", T.SERIES[4], _ratio_values)))
+            recs_df, "垂直比例", "垂直比例 (%)", T.SERIES[4], _ratio_values, chart_type=chart_type)))
+
     if _col_has(recs_df, "stance_time_ms") and _col_has(recs_df, "cadence"):
         out.append(("着地/腾空", _dual_scatter_option(
             recs_df, "着地时间", T.SERIES[1], _stance_values,
-            "腾空时间", T.SERIES[7], _flight_values, "着地/腾空 (ms)")))
+            "腾空时间", T.SERIES[7], _flight_values, "着地/腾空 (ms)", chart_type=chart_type)))
+
     return out
 
 

@@ -16,7 +16,8 @@ SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 ACTIVITY_COLS = [
     "filename", "source", "sport", "start_time", "duration_s", "timer_s",
     "distance_m", "avg_speed_mps", "max_speed_mps", "avg_hr", "max_hr",
-    "avg_cadence", "avg_power", "calories", "ele_gain_m", "ele_loss_m", "avg_grade",
+    "avg_cadence", "avg_stride_length", "avg_vertical_oscillation", "avg_stance_time",
+    "avg_power", "calories", "ele_gain_m", "ele_loss_m", "avg_grade",
 ]
 
 
@@ -47,6 +48,31 @@ def init_db() -> None:
     with get_conn() as conn:
         conn.execute("PRAGMA journal_mode = WAL")
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+        _migrate(conn)
+
+
+def _column_exists(conn, table: str, col: str) -> bool:
+    return any(r[1] == col for r in conn.execute(f"PRAGMA table_info({table})"))
+
+
+def _migrate(conn) -> None:
+    """补齐旧库缺失的列（CREATE TABLE IF NOT EXISTS 不会为已存在的表加列）。幂等。"""
+    additions = {
+        "records": [
+            ("stride_length_m", "REAL"),
+            ("vertical_oscillation_cm", "REAL"),
+            ("stance_time_ms", "REAL"),
+        ],
+        "activities": [
+            ("avg_stride_length", "REAL"),
+            ("avg_vertical_oscillation", "REAL"),
+            ("avg_stance_time", "REAL"),
+        ],
+    }
+    for table, cols in additions.items():
+        for col, typ in cols:
+            if not _column_exists(conn, table, col):
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
 
 
 # --------------------------------------------------------------------------- #
@@ -94,12 +120,15 @@ def insert_records(activity_id: int, records: list[dict]) -> None:
             activity_id, r.get("elapsed_s"), r.get("hr"), r.get("cadence"),
             r.get("speed_mps"), r.get("distance_m"), r.get("altitude_m"),
             r.get("lat"), r.get("lon"), r.get("power"),
+            r.get("stride_length_m"), r.get("vertical_oscillation_cm"), r.get("stance_time_ms"),
         )
         for r in records
     ]
     sql = (
         "INSERT INTO records (activity_id, elapsed_s, hr, cadence, speed_mps, "
-        "distance_m, altitude_m, lat, lon, power) VALUES (?,?,?,?,?,?,?,?,?,?)"
+        "distance_m, altitude_m, lat, lon, power, "
+        "stride_length_m, vertical_oscillation_cm, stance_time_ms) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)"
     )
     with get_conn() as conn:
         conn.executemany(sql, rows)

@@ -72,3 +72,14 @@ uploads/
 
 # Memory / Session
 .claude/
+
+# 转换工具的个人健康数据输入/输出（体积大且敏感，勿提交；脚本 *.py 不受影响）
+convert/electrocardiograms/
+convert/workout-routes/
+convert/fit_output/
+convert/tcx_output/
+convert/*.xml
+convert/*.zip
+
+# 根目录的健康数据压缩包
+*.zip

@@ -62,41 +62,65 @@ def render(nav, activity_id):
                 # 2. 核心修改：增加 width:100%，让 ECharts 图表撑满卡片内部区域
                 ui.echart(opt).style("width:100%; height:220px")
 
-        # 跑步动力学：左平均卡 + 右散点图（仅有数据时显示）
-        dyn = charts.dynamics_scatter_options(recs)
-        avg_stride = act["avg_stride_length"]
-        avg_vo = act["avg_vertical_oscillation"]
-        avg_stance = act["avg_stance_time"]
-        if dyn or any(v is not None for v in (avg_stride, avg_vo, avg_stance)):
-            section_title("跑步动力学")
-            cad = act["avg_cadence"]
-            ratio = (avg_vo / avg_stride) if (avg_vo and avg_stride) else None  # cm/m 即 %
-            flight = (60000.0 / cad - avg_stance) if (cad and avg_stance) else None
-            with ui.row().classes("w-full").style("align-items:stretch;gap:14px"):
-                # 左：平均数据（两列：步频/步幅 · 振幅/比例 · 着地/腾空）
-                with ui.column().style("flex:0 0 300px;gap:8px"):
-                    with ui.row().classes("w-full dyn-cols"):
-                        stat_tile("步频", U.fmt_int(cad, " spm"), color="#c98500")
-                        stat_tile("步幅", U.fmt_stride(avg_stride), color=T.SERIES[6])
-                    with ui.row().classes("w-full dyn-cols"):
-                        stat_tile("垂直振幅", U.fmt_vertical_oscillation(avg_vo), color=T.SERIES[5])
-                        stat_tile("垂直比例", U.fmt_ratio(ratio), color=T.SERIES[4])
-                    with ui.row().classes("w-full dyn-cols"):
-                        stat_tile("着地时间", U.fmt_ms(avg_stance), color=T.SERIES[1])
-                        stat_tile("腾空时间", U.fmt_ms(flight), color=T.SERIES[7])
-                # 右：散点图（tab 切换，类似 Runalyze）
-                with ui.column().style("flex:1;gap:6px;min-width:0"):
-                    if dyn:
-                        with ui.card().classes("panel w-full").style("padding:10px 14px"):
-                            with ui.tabs().props("dense").classes("w-full") as tabs:
-                                for label, _ in dyn:
-                                    ui.tab(label)
-                            with ui.tab_panels(tabs, value=dyn[0][0]).classes("w-full"):
-                                for label, opt in dyn:
-                                    with ui.tab_panel(label):
-                                        ui.echart(opt).style("width:100%; height:340px")
-                    else:
-                        ui.label("无跑步动力学采样数据").classes("muted")
+    # 跑步动力学：左平均卡（两列）+ 右散点图/曲线图（可切换，仅有数据时显示）
+    dyn = charts.dynamics_scatter_options(recs)
+    avg_stride = act["avg_stride_length"]
+    avg_vo = act["avg_vertical_oscillation"]
+    avg_stance = act["avg_stance_time"]
+
+    if dyn or any(v is not None for v in (avg_stride, avg_vo, avg_stance)):
+        section_title("跑步动力学")
+        cad = act["avg_cadence"]
+        ratio = (avg_vo / avg_stride) if (avg_vo and avg_stride) else None  # cm/m 即 %
+        flight = (60000.0 / cad - avg_stance) if (cad and avg_stance) else None
+
+        # 右侧图表面板：散点/曲线可切换。@ui.refreshable 让 toggle 只局部刷新这一张卡片，
+        # 不重建整个页面。current_type 作为显式参数传入，切换时用新值 refresh。
+        @ui.refreshable
+        def dynamics_panel(current_type: str = "scatter"):
+            current_dyn = charts.dynamics_scatter_options(recs, chart_type=current_type)
+            if not current_dyn:
+                ui.label("无跑步动力学采样数据").classes("muted")
+                return
+            with ui.card().classes("panel w-full").style("padding:10px 14px"):
+                # 顶部工具栏：Tab 靠左，Toggle 靠右
+                with ui.row().classes("w-full items-center justify-between"):
+                    with ui.tabs().props("dense") as tabs:
+                        for label, _ in current_dyn:
+                            ui.tab(label)
+
+                    # 切换按钮：on_value_change 收到的就是新选中的值（'scatter' 或 'line'）
+                    ui.toggle(
+                        {"scatter": "散点", "line": "曲线"},
+                        value=current_type,
+                    ).props("dense mandatory toggle-color=primary flat text-color=grey-7").on_value_change(
+                        lambda e: dynamics_panel.refresh(
+                            e.value if isinstance(e.value, str) else str(e.value))
+                    )
+
+                # Tab 内容区
+                with ui.tab_panels(tabs, value=current_dyn[0][0]).classes("w-full"):
+                    for label, opt in current_dyn:
+                        with ui.tab_panel(label):
+                            ui.echart(opt).style("width:100%; height:340px")
+
+        # 左右双栏：左平均卡（两列）+ 右可切换图表
+        with ui.row().classes("w-full").style("align-items:stretch;gap:14px"):
+            # 左：平均数据（两列：步频/步幅 · 振幅/比例 · 着地/腾空）
+            with ui.column().style("flex:0 0 300px;gap:8px"):
+                with ui.row().classes("w-full dyn-cols"):
+                    stat_tile("步频", U.fmt_int(cad, " spm"), color="#c98500")
+                    stat_tile("步幅", U.fmt_stride(avg_stride), color=T.SERIES[6])
+                with ui.row().classes("w-full dyn-cols"):
+                    stat_tile("垂直振幅", U.fmt_vertical_oscillation(avg_vo), color=T.SERIES[5])
+                    stat_tile("垂直比例", U.fmt_ratio(ratio), color=T.SERIES[4])
+                with ui.row().classes("w-full dyn-cols"):
+                    stat_tile("着地时间", U.fmt_ms(avg_stance), color=T.SERIES[1])
+                    stat_tile("腾空时间", U.fmt_ms(flight), color=T.SERIES[7])
+
+            # 右：可切换的图表面板（只调用一次）
+            with ui.column().style("flex:1;gap:6px;min-width:0"):
+                dynamics_panel("scatter")
 
     # 心率区间 + 分圈
     has_zones = bool(recs["hr"].notna().any()) if not recs.empty else False

@@ -12,7 +12,10 @@ CREATE TABLE IF NOT EXISTS activities (
     max_speed_mps REAL,
     avg_hr        REAL,
     max_hr        REAL,
-    avg_cadence   REAL,
+    avg_cadence           REAL,
+    avg_stride_length     REAL,
+    avg_vertical_oscillation REAL,
+    avg_stance_time       REAL,
     avg_power     REAL,
     calories      REAL,
     ele_gain_m    REAL,
@@ -32,7 +35,10 @@ CREATE TABLE IF NOT EXISTS records (
     altitude_m  REAL,
     lat         REAL,
     lon         REAL,
-    power       REAL,
+    power                 REAL,
+    stride_length_m       REAL,
+    vertical_oscillation_cm REAL,
+    stance_time_ms        REAL,
     FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE
 );
 
